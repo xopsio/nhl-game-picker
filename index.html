@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NHL Game Picker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <h1>NHL Game Picker</h1>
+      <p id="dateLabel" class="date-label" aria-live="polite"></p>
+    </header>
+
+    <section class="actions" aria-label="Toiminnot">
+      <button id="pickBtn" type="button" class="btn btn-primary" disabled>Arvo ottelu</button>
+      <button id="repickBtn" type="button" class="btn btn-secondary" disabled>Arvo uudelleen</button>
+    </section>
+
+    <section id="pickPanel" class="pick-panel" aria-live="polite" hidden>
+      <h2>Arvottu ottelu</h2>
+      <div id="pickContent"></div>
+    </section>
+
+    <section class="games-section" aria-label="Päivän ottelut">
+      <h2 class="section-title">Kaikki tämän päivän ottelut</h2>
+      <div id="status" class="status" role="status" aria-live="polite">Ladataan otteluita…</div>
+      <ul id="gamesList" class="games-list"></ul>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
