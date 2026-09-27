@@ -1,6 +1,6 @@
 "use strict";
 
-const NHL_API_BASE = "https://api-web.nhle.com/v1";
+const NHL_API_BASE = "/api/score";
 const LOGO_BASE = "https://assets.nhle.com/logos/nhl/svg";
 const TIMEZONE = "Europe/Helsinki";
 
@@ -190,7 +190,7 @@ function pickGame() {
 
 async function fetchGames() {
   const date = getHelsinkiDateString();
-  const url = `${NHL_API_BASE}/score/${date}`;
+  const url = `${NHL_API_BASE}?date=${date}`;
   try {
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
