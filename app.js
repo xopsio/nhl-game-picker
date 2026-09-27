@@ -3,6 +3,42 @@
 const NHL_API_BASE = "/api/score";
 const LOGO_BASE = "https://assets.nhle.com/logos/nhl/svg";
 const TIMEZONE = "Europe/Helsinki";
+const STORAGE_PREFIX = "nhl-picker-selections:";
+
+const ALL_TEAMS = [
+  { abbrev: "ANA", name: "Anaheim Ducks" },
+  { abbrev: "BOS", name: "Boston Bruins" },
+  { abbrev: "BUF", name: "Buffalo Sabres" },
+  { abbrev: "CGY", name: "Calgary Flames" },
+  { abbrev: "CAR", name: "Carolina Hurricanes" },
+  { abbrev: "CHI", name: "Chicago Blackhawks" },
+  { abbrev: "COL", name: "Colorado Avalanche" },
+  { abbrev: "CBJ", name: "Columbus Blue Jackets" },
+  { abbrev: "DAL", name: "Dallas Stars" },
+  { abbrev: "DET", name: "Detroit Red Wings" },
+  { abbrev: "EDM", name: "Edmonton Oilers" },
+  { abbrev: "FLA", name: "Florida Panthers" },
+  { abbrev: "LAK", name: "Los Angeles Kings" },
+  { abbrev: "MIN", name: "Minnesota Wild" },
+  { abbrev: "MTL", name: "Montréal Canadiens" },
+  { abbrev: "NSH", name: "Nashville Predators" },
+  { abbrev: "NJD", name: "New Jersey Devils" },
+  { abbrev: "NYI", name: "New York Islanders" },
+  { abbrev: "NYR", name: "New York Rangers" },
+  { abbrev: "OTT", name: "Ottawa Senators" },
+  { abbrev: "PHI", name: "Philadelphia Flyers" },
+  { abbrev: "PIT", name: "Pittsburgh Penguins" },
+  { abbrev: "SJS", name: "San Jose Sharks" },
+  { abbrev: "SEA", name: "Seattle Kraken" },
+  { abbrev: "STL", name: "St. Louis Blues" },
+  { abbrev: "TBL", name: "Tampa Bay Lightning" },
+  { abbrev: "TOR", name: "Toronto Maple Leafs" },
+  { abbrev: "UTA", name: "Utah Hockey Club" },
+  { abbrev: "VAN", name: "Vancouver Canucks" },
+  { abbrev: "VGK", name: "Vegas Golden Knights" },
+  { abbrev: "WPG", name: "Winnipeg Jets" },
+  { abbrev: "WSH", name: "Washington Capitals" },
+];
 
 const els = {
   dateLabel: document.getElementById("dateLabel"),
@@ -12,14 +48,17 @@ const els = {
   repickBtn: document.getElementById("repickBtn"),
   pickPanel: document.getElementById("pickPanel"),
   pickContent: document.getElementById("pickContent"),
+  teamGrid: document.getElementById("teamGrid"),
+  viaplayCount: document.getElementById("viaplayCount"),
 };
 
 const state = {
   games: [],
   pickedId: null,
-  lastPickIndex: null,
+  lastPickedPoolId: null,
   loading: true,
   error: null,
+  selectedGameIds: new Set(),
 };
 
 function getHelsinkiDateString() {
@@ -78,8 +117,88 @@ function escapeHtml(str) {
   }[c]));
 }
 
+function getViaplayGames() {
+  return state.games.filter((g) => state.selectedGameIds.has(g.id));
+}
+
+function getGamesForTeam(abbrev) {
+  return state.games.filter(
+    (g) => g.awayTeam.abbrev === abbrev || g.homeTeam.abbrev === abbrev,
+  );
+}
+
+function loadSelections() {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + getHelsinkiDateString());
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) {
+      state.selectedGameIds = new Set(arr.filter((x) => typeof x === "number"));
+    }
+  } catch (_err) {
+    // ignore corrupt or unavailable storage
+  }
+}
+
+function saveSelections() {
+  try {
+    localStorage.setItem(
+      STORAGE_PREFIX + getHelsinkiDateString(),
+      JSON.stringify([...state.selectedGameIds]),
+    );
+  } catch (_err) {
+    // localStorage may be unavailable (private mode, quota); ignore
+  }
+}
+
 function renderDate() {
   els.dateLabel.textContent = formatHelsinkiDateLong();
+}
+
+function renderTeamGrid() {
+  const gamesByTeam = new Map();
+  for (const g of state.games) {
+    if (!gamesByTeam.has(g.awayTeam.abbrev)) gamesByTeam.set(g.awayTeam.abbrev, []);
+    if (!gamesByTeam.has(g.homeTeam.abbrev)) gamesByTeam.set(g.homeTeam.abbrev, []);
+    gamesByTeam.get(g.awayTeam.abbrev).push(g);
+    gamesByTeam.get(g.homeTeam.abbrev).push(g);
+  }
+
+  const list = els.teamGrid;
+  list.innerHTML = "";
+  for (const t of ALL_TEAMS) {
+    const teamGames = gamesByTeam.get(t.abbrev) || [];
+    const playsToday = teamGames.length > 0;
+    const selectedCount = teamGames.filter((g) => state.selectedGameIds.has(g.id)).length;
+    const selected = selectedCount > 0;
+    const li = document.createElement("li");
+    li.className = "team-cell";
+    if (!playsToday) li.classList.add("disabled");
+    if (selected) li.classList.add("selected");
+    li.dataset.abbrev = t.abbrev;
+
+    li.innerHTML = `
+      <img class="logo" src="${escapeHtml(logoUrl(t.abbrev))}" alt="" loading="lazy" />
+      <span class="abbrev">${escapeHtml(t.abbrev)}</span>
+      <span class="name">${escapeHtml(t.name)}</span>
+    `;
+    const img = li.querySelector("img.logo");
+    img.addEventListener("error", () => { img.style.visibility = "hidden"; });
+    if (playsToday) {
+      if (teamGames.length === 1) {
+        li.addEventListener("click", () => toggleGame(teamGames[0].id));
+      } else {
+        li.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openChooser(t.abbrev, li);
+        });
+      }
+    }
+    list.appendChild(li);
+  }
+
+  const poolSize = getViaplayGames().length;
+  els.viaplayCount.textContent = `Viaplay-ottelut: ${poolSize}`;
 }
 
 function renderStatus() {
@@ -101,13 +220,16 @@ function renderStatus() {
 }
 
 function renderGames() {
+  const poolIds = new Set(getViaplayGames().map((g) => g.id));
   const list = els.gamesList;
   list.innerHTML = "";
   for (const g of state.games) {
     const info = describeState(g.gameState);
+    const inPool = poolIds.has(g.id);
     const li = document.createElement("li");
     li.className = "game-card";
     if (info.cls) li.classList.add(info.cls);
+    if (inPool) li.classList.add("viaplay");
     if (g.id === state.pickedId) li.classList.add("picked");
 
     li.innerHTML = `
@@ -124,6 +246,7 @@ function renderGames() {
         ${info.showScore ? `<span class="score">${g.homeTeam.score ?? 0}</span>` : ""}
       </div>
       <div class="meta">
+        ${inPool ? `<span class="badge viaplay">Viaplay</span>` : ""}
         ${info.label ? `<span class="badge ${info.cls}">${escapeHtml(info.label)}</span>` : ""}
         ${g.startTimeUTC ? `<span class="time">${escapeHtml(formatHelsinkiTime(g.startTimeUTC))}</span>` : ""}
       </div>
@@ -140,14 +263,13 @@ function renderGames() {
 }
 
 function renderPick() {
-  const hasPick = state.pickedId !== null && state.games.some((g) => g.id === state.pickedId);
-  if (!hasPick) {
+  const pool = getViaplayGames();
+  const pickedInPool = state.pickedId !== null && pool.some((g) => g.id === state.pickedId);
+  if (!pickedInPool) {
     els.pickPanel.hidden = true;
-    els.repickBtn.disabled = state.games.length === 0;
     return;
   }
-  els.repickBtn.disabled = false;
-  const g = state.games.find((x) => x.id === state.pickedId);
+  const g = pool.find((x) => x.id === state.pickedId);
   const info = describeState(g.gameState);
   els.pickPanel.hidden = false;
 
@@ -165,24 +287,114 @@ function renderPick() {
 }
 
 function updatePickButtons() {
-  const hasGames = state.games.length > 0;
-  const hasPick = state.pickedId !== null;
-  els.pickBtn.disabled = !hasGames;
-  els.repickBtn.disabled = !hasGames || !hasPick;
+  const pool = getViaplayGames();
+  els.pickBtn.disabled = pool.length === 0;
+  const pickedInPool = state.pickedId !== null && pool.some((g) => g.id === state.pickedId);
+  els.repickBtn.disabled = pool.length === 0 || !pickedInPool;
+}
+
+function toggleGame(gameId) {
+  if (state.selectedGameIds.has(gameId)) {
+    state.selectedGameIds.delete(gameId);
+  } else {
+    state.selectedGameIds.add(gameId);
+  }
+  const pool = getViaplayGames();
+  if (state.pickedId && !pool.some((g) => g.id === state.pickedId)) {
+    state.pickedId = null;
+    state.lastPickedPoolId = null;
+  }
+  saveSelections();
+  renderTeamGrid();
+  renderGames();
+  renderPick();
+  updatePickButtons();
+}
+
+let chooserDocClickHandler = null;
+let chooserKeyHandler = null;
+
+function openChooser(abbrev, anchorEl) {
+  closeChooser();
+  const games = getGamesForTeam(abbrev);
+  const chooser = document.createElement("div");
+  chooser.id = "matchupChooser";
+  chooser.className = "matchup-chooser";
+  chooser.setAttribute("role", "dialog");
+  chooser.innerHTML = `
+    <div class="chooser-header">${escapeHtml(abbrev)} — valitse ottelu</div>
+    ${games.map((g) => {
+      const sel = state.selectedGameIds.has(g.id);
+      const vsLabel = `${escapeHtml(g.awayTeam.abbrev)} @ ${escapeHtml(g.homeTeam.abbrev)}`;
+      const time = g.startTimeUTC ? escapeHtml(formatHelsinkiTime(g.startTimeUTC)) : "";
+      return `<button type="button" class="matchup-option${sel ? " selected" : ""}" data-game-id="${g.id}">
+        <span class="matchup-teams">${vsLabel}</span>
+        ${time ? `<span class="matchup-time">${time}</span>` : ""}
+      </button>`;
+    }).join("")}
+  `;
+  document.body.appendChild(chooser);
+
+  const rect = anchorEl.getBoundingClientRect();
+  const cRect = chooser.getBoundingClientRect();
+  let top = rect.bottom + window.scrollY + 6;
+  if (top + cRect.height > window.innerHeight + window.scrollY) {
+    top = rect.top + window.scrollY - cRect.height - 6;
+  }
+  let left = rect.left + window.scrollX;
+  if (left + cRect.width > window.innerWidth + window.scrollX) {
+    left = window.innerWidth + window.scrollX - cRect.width - 8;
+  }
+  chooser.style.top = `${Math.max(0, top)}px`;
+  chooser.style.left = `${Math.max(0, left)}px`;
+
+  chooser.querySelectorAll(".matchup-option").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleGame(Number(btn.dataset.gameId));
+      closeChooser();
+    });
+  });
+
+  chooserDocClickHandler = (e) => {
+    const cur = document.getElementById("matchupChooser");
+    if (cur && !cur.contains(e.target)) closeChooser();
+  };
+  chooserKeyHandler = (e) => {
+    if (e.key === "Escape") closeChooser();
+  };
+  setTimeout(() => {
+    document.addEventListener("click", chooserDocClickHandler);
+    document.addEventListener("keydown", chooserKeyHandler);
+  }, 0);
+}
+
+function closeChooser() {
+  if (chooserDocClickHandler) {
+    document.removeEventListener("click", chooserDocClickHandler);
+    chooserDocClickHandler = null;
+  }
+  if (chooserKeyHandler) {
+    document.removeEventListener("keydown", chooserKeyHandler);
+    chooserKeyHandler = null;
+  }
+  const existing = document.getElementById("matchupChooser");
+  if (existing) existing.remove();
 }
 
 function pickGame() {
-  if (state.games.length === 0) return;
-  let idx;
-  if (state.games.length === 1) {
-    idx = 0;
+  const pool = getViaplayGames();
+  if (pool.length === 0) return;
+  let chosen;
+  if (pool.length === 1) {
+    chosen = pool[0];
   } else {
     do {
-      idx = Math.floor(Math.random() * state.games.length);
-    } while (idx === state.lastPickIndex);
+      chosen = pool[Math.floor(Math.random() * pool.length)];
+    } while (chosen.id === state.lastPickedPoolId);
   }
-  state.lastPickIndex = idx;
-  state.pickedId = state.games[idx].id;
+  state.lastPickedPoolId = chosen.id;
+  state.pickedId = chosen.id;
   renderGames();
   renderPick();
   updatePickButtons();
@@ -206,8 +418,10 @@ async function fetchGames() {
 }
 
 async function init() {
+  loadSelections();
   renderDate();
   renderStatus();
+  renderTeamGrid();
   renderGames();
   renderPick();
   updatePickButtons();
@@ -216,7 +430,13 @@ async function init() {
   els.repickBtn.addEventListener("click", pickGame);
 
   await fetchGames();
+  const pool = getViaplayGames();
+  if (state.pickedId && !pool.some((g) => g.id === state.pickedId)) {
+    state.pickedId = null;
+    state.lastPickedPoolId = null;
+  }
   renderStatus();
+  renderTeamGrid();
   renderGames();
   renderPick();
   updatePickButtons();

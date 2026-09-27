@@ -151,6 +151,143 @@ html, body {
 
 .status[hidden] { display: none; }
 
+.team-section {
+  margin-bottom: 24px;
+}
+
+.viaplay-count {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.section-hint {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.team-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.team-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.team-cell:hover:not(.disabled) {
+  background: var(--surface-2);
+}
+
+.team-cell:active:not(.disabled) {
+  transform: translateY(1px);
+}
+
+.team-cell.selected {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.team-cell.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.team-cell .logo {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.team-cell .abbrev {
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.team-cell .name {
+  display: none;
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.badge.viaplay {
+  background: var(--accent);
+  color: #1a1206;
+}
+
+.matchup-chooser {
+  position: absolute;
+  z-index: 100;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  min-width: 200px;
+  max-width: 260px;
+}
+
+.chooser-header {
+  padding: 6px 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.matchup-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.matchup-option:hover { background: var(--surface); }
+
+.matchup-option.selected {
+  background: var(--accent);
+  color: #1a1206;
+}
+
+.matchup-option .matchup-teams { font-weight: 700; }
+.matchup-option .matchup-time { opacity: 0.75; font-size: 0.78rem; }
+
+@media (min-width: 540px) {
+  .team-cell .name { display: inline; }
+  .team-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+}
+
 .games-list {
   list-style: none;
   margin: 0;
